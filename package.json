@@ -273,5 +273,14 @@
     "tsx": "^4.20.0",
     "typescript": "~5.9.3",
     "esbuild": "^0.28.2"
-  }
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/inkspect-code-review/inkspect-core.git"
+  },
+  "bugs": {
+    "url": "https://github.com/inkspect-code-review/inkspect-core/issues"
+  },
+  "homepage": "https://github.com/inkspect-code-review/inkspect-core#readme"
 }
