@@ -1,0 +1,1 @@
+ALTER TABLE "chatMessage" ADD COLUMN IF NOT EXISTS actions text NOT NULL DEFAULT '[]';

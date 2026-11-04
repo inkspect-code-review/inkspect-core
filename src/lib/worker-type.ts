@@ -1,0 +1,1 @@
+export type Worker = { organization_id: string; repository_id: string; connection_id: string; installation_id: string; full_name: string; queue_database: string; queue_schema: string; app_id: string; private_key_file: string; size_bytes: string | null; access_verified_at: Date | null; access_error: string | null };
