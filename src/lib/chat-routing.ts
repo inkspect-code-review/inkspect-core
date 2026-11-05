@@ -1,6 +1,7 @@
 import { bedrockConfig, converse, type AIMessage, type AIReply } from "./bedrock";
 
 export function chatRoutingModel(env:Record<string,string|undefined>=process.env) {
+ if(env.INKSPECT_AI_PROVIDER==="inkspect")return "inkspect-router";
  return env.INKSPECT_CHAT_ROUTING_MODEL || env.INKSPECT_DEFAULT_CHAT_MODEL || env.INKSPECT_AI_MODEL || "global.openai.gpt-6.1-sol";
 }
 export type ChatIntent = "repository";

@@ -1,3 +1,4 @@
+import { modelTransport } from "./model-transport";
 import type { ChatIndexAction } from "./chat-actions";
 import { EventStreamCodec } from "@smithy/eventstream-codec";
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8";
@@ -10,9 +11,14 @@ import { captureError } from "./diagnostics/server";
 export type AIMessage = { role: "user" | "assistant"; content: string; reviewReferences?:{repository:string;jobId:string;pullNumber:number}[] };
 export type AIReply = { actions?: ChatIndexAction[]; title?: string; content: string; model: string; inputTokens: number; outputTokens: number; totalTokens: number; durationMs: number; cacheReadInputTokens?: number; cacheWriteInputTokens?: number; chargedNanoUSD?: string; sources?: ChatReference[] };
 export class AIError extends Error { constructor(public status: number, message: string) { super(message); } }
-export type BedrockConfig = {key:string;region:string;model:string;inputRate?:bigint;outputRate?:bigint;cacheReadRate?:bigint|string;cacheWriteRate?:bigint|string;promptCaching?:boolean};
+export type BedrockConfig = {endpoint?:string;key:string;region:string;model:string;inputRate?:bigint;outputRate?:bigint;cacheReadRate?:bigint|string;cacheWriteRate?:bigint|string;promptCaching?:boolean};
 export function bedrockConfig(env: Record<string,string|undefined> = process.env, model = env.INKSPECT_DEFAULT_CHAT_MODEL || env.INKSPECT_AI_MODEL || "global.openai.gpt-6.1-sol"): BedrockConfig {
-  const key = env.AWS_BEARER_TOKEN_BEDROCK?.trim(), region = env.AWS_REGION || "eu-west-2";
+  const transport=modelTransport(env);
+  const key = transport.key, region = env.AWS_REGION || "eu-west-2";
+  if(transport.provider==="inkspect") {
+    const alias=model.startsWith("inkspect-")?model:"inkspect-chat";
+    return {key:key!,region,model:alias,endpoint:transport.endpoint,promptCaching:false};
+  }
   if (!key || !/^[a-z]{2}(?:-gov)?-[a-z]+-\d$/.test(region) || !model || model.length > 250) throw new AIError(503, "Ask AI is temporarily unavailable.");
   const priced = env.INKSPECT_AI_PRICING_MODEL === model && env.INKSPECT_AI_PRICING_REGION === region;
   const rate = (value: string | undefined) => value && /^\d{1,10}$/.test(value) ? BigInt(value) : undefined;
@@ -25,7 +31,7 @@ export async function converse(messages: AIMessage[], repositories: string[], fe
   context = prepared.context;
   let response: Response;
   try {
-    response = await fetcher(`https://bedrock-runtime.${config.region}.amazonaws.com/model/${encodeURIComponent(config.model)}/${options.onDelta ? "converse-stream" : "converse"}`, {
+    response = await fetcher(`${config.endpoint || `https://bedrock-runtime.${config.region}.amazonaws.com`}/model/${encodeURIComponent(config.model)}/${options.onDelta ? "converse-stream" : "converse"}`, {
       method: "POST", redirect: "error", signal: AbortSignal.timeout(options.timeoutMs ?? 90_000), headers: { Authorization: `Bearer ${config.key}`, "Content-Type": "application/json" },
       body: JSON.stringify({ ...prepared.input, inferenceConfig: { maxTokens: options.maxTokens ?? 2048, ...(!/(?:^|\.)openai\.gpt-6/.test(config.model) ? {temperature: options.temperature ?? 0.2} : {}) } }),
     });
@@ -86,7 +92,7 @@ async function inputTokens(input:ConverseInput, fetcher:typeof fetch, config:Bed
   const key = `${config.region}:${config.model}`;
   if ((countUnavailable.get(key)||0) < Date.now()) {
     try {
-      const response = await fetcher(`https://bedrock-runtime.${config.region}.amazonaws.com/model/${encodeURIComponent(config.model)}/count-tokens`, {
+      const response = await fetcher(`${config.endpoint || `https://bedrock-runtime.${config.region}.amazonaws.com`}/model/${encodeURIComponent(config.model)}/count-tokens`, {
         method:"POST",redirect:"error",signal:AbortSignal.timeout(15_000),headers:{Authorization:`Bearer ${config.key}`,"Content-Type":"application/json"},body:JSON.stringify({input:{converse:input}}),
       });
       if (response.ok) {

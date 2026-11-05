@@ -221,7 +221,8 @@
     "./migrations/006_repository_indexes.sql": "./migrations/006_repository_indexes.sql",
     "./migrations/010_review_models.sql": "./migrations/010_review_models.sql",
     "./migrations/015_chat_actions.sql": "./migrations/015_chat_actions.sql",
-    "./cli/dev-logs": "./src/cli/dev-logs.ts"
+    "./cli/dev-logs": "./src/cli/dev-logs.ts",
+    "./lib/model-transport": "./src/lib/model-transport.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",

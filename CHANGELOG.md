@@ -10,6 +10,8 @@ as appropriate. The package's `0.1.0` version is not a claim of a tagged release
 
 #### Added
 
+- Route instance AI requests through the Inkspect provider when selected at installation (2026-11-04).
+
 - Initial shared authentication, database and domain library source snapshot with independent setup and automated checks.
 - MIT license, contribution and community guidelines, security/support policies,
   issue forms, a pull-request checklist and dependency-update configuration.
