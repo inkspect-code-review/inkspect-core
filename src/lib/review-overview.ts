@@ -10,7 +10,7 @@ export const overviewDays = 371;
 export type ReportDigest = { decision: OverviewDecision; severities: Record<OverviewSeverity, number> };
 export type OverviewRepositoryJobs = { repositoryId: number; fullName: string; reviews: ReviewJob[] };
 export type OverviewReview = {
-  id: string; repositoryId: number; repository: string; number: number | null; url: string;
+  id: string; repositoryId: number; repository: string; number: number | null; url: string; title?: string;
   status: string; createdAt: string; decision: OverviewDecision | null; findings: number | null;
   severities: Record<OverviewSeverity, number> | null;
   findingStates?: { resolved: number; notDetected: number; historical: number };
@@ -85,7 +85,7 @@ export function buildOverview(lists: OverviewRepositoryJobs[], digests: Map<stri
       const number = pullNumber(review.snapshot?.url ?? "");
       rows.push({
         id: review.job.id, repositoryId: list.repositoryId, repository: list.fullName, number,
-        url: review.snapshot?.url ?? "", status, createdAt, decision: digest?.decision ?? null,
+        url: review.snapshot?.url ?? "", title: review.snapshot?.title?.trim() || undefined, status, createdAt, decision: digest?.decision ?? null,
         findings: digest ? overviewSeverities.reduce((sum, severity) => sum + digest.severities[severity], 0) : null,
         severities: digest ? { ...digest.severities } : null,
       });

@@ -10,6 +10,8 @@ as appropriate. The package's `0.1.0` version is not a claim of a tagged release
 
 #### Added
 
+- Include the saved pull request title in recent review entries.
+
 - Expose saved pull request titles and support looking up a title for older reviews.
 
 ### 2026-11-04

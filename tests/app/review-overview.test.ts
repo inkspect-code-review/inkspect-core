@@ -45,3 +45,9 @@ test("saved review cards remain scoped to their repository", () => {
   assert.equal(result.latest?.repositoryId, 17);
   assert.deepEqual(result.recent.map(row => row.repositoryId), [17, 18, 17, 18]);
 });
+
+test("recent reviews include the saved PR title when available", () => {
+  const [first, older] = reviews;
+  const list = { ...repository(), reviews: [{ ...first, snapshot: { ...first.snapshot, title: "  Update dependencies  " } }, older] };
+  assert.deepEqual(buildOverview([list], digests, options).recent.map(row => row.title), ["Update dependencies", undefined]);
+});
