@@ -215,6 +215,11 @@ export async function handleReviews(request: Request, auth: Auth, send = engineR
         const [policy, byok] = await Promise.all([send("/github/repositories", "GET", undefined, claims), providerState(access.organizationId)]);
         return reviewJSON({ ...policy, byok_credential_id: byok.review_provider === "byok" ? byok.connection?.id || "" : "" });
       }
+      if (action === "pull-title") {
+        const number = Number(url.searchParams.get("number"));
+        if (!Number.isSafeInteger(number) || number < 1) throw new ReviewError(400, "Invalid pull request number.");
+        return reviewJSON(await send(`/github/pulls/${number}/title`, "GET", undefined, claims));
+      }
       if (action === "pulls") {
         const page = Number(url.searchParams.get("page") || 1);
         if (!Number.isInteger(page) || page < 1 || page > 100) throw new ReviewError(400, "Invalid page.");

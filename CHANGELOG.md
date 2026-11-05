@@ -6,6 +6,12 @@ as appropriate. The package's `0.1.0` version is not a claim of a tagged release
 
 ## Unreleased
 
+### 2026-11-05
+
+#### Added
+
+- Expose saved pull request titles and support looking up a title for older reviews.
+
 ### 2026-11-04
 
 #### Added
