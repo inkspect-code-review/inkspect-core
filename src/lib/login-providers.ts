@@ -6,6 +6,19 @@ export const loginProviders = [
 ] as const;
 
 export type LoginProvider = typeof loginProviders[number]["id"];
+export type RememberedLoginMethod = LoginProvider | "passkey" | "email";
+export const lastLoginMethodCookie = "inkspect.last-login-method";
+
+export function parseLoginMethod(value: unknown): RememberedLoginMethod | undefined {
+  return isLoginProvider(value) || value === "passkey" || value === "email" ? value : undefined;
+}
+
+export function loginMethodForPath(path?: string, provider?: string): RememberedLoginMethod | undefined {
+  if (path?.startsWith("/callback/")) return parseLoginMethod(provider ?? path.slice("/callback/".length));
+  if (path === "/magic-link/verify") return "email";
+  if (path === "/passkey/verify-authentication") return "passkey";
+  return undefined;
+}
 export type LinkSource = "settings" | undefined;
 export type SignInMethod = {
   id: LoginProvider;

@@ -9,6 +9,7 @@ import { sendMagicLinkEmail } from "./mail";
 import { workspacePlugin } from "./workspace";
 import { prepareAccountLink, validateAccountLinking } from "./account-linking";
 import { accountOnboarding } from "./account-onboarding-plugin";
+import { rememberLastLoginMethod } from "./last-login-method";
 
 export type AuthEditionPolicy = {
   canCreateOrganization: (user: { id: string; emailVerified: boolean }) => boolean | Promise<boolean>;
@@ -56,6 +57,6 @@ export function createEditionAuth(database: NonNullable<BetterAuthOptions["datab
       // Route every invitation through the selected edition membership service.
       beforeCreateInvitation: async () => { throw new APIError("FORBIDDEN", { message: policy.createInvitationMessage }); },
       beforeAcceptInvitation: async () => { throw new APIError("FORBIDDEN", { message: policy.acceptInvitationMessage }); },
-    } }), workspacePlugin()],
+    } }), workspacePlugin(), rememberLastLoginMethod()],
   });
 }

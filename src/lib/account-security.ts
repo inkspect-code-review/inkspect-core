@@ -1,5 +1,7 @@
 import { APIError, getAuthoritativeSessionFromCtx, createAuthMiddleware } from "better-auth/api";
 import { twoFactor } from "better-auth/plugins/two-factor";
+import { loginMethodForPath } from "./login-providers";
+import { pendingLoginMethodCookie } from "./last-login-method";
 
 // Reuse Better Auth's challenge creation, cookie clearing and attempt limits for
 // every sign-in method this app offers, including browser redirect callbacks.
@@ -11,6 +13,7 @@ export function accountTwoFactor() {
       ctx.path?.startsWith("/callback/") || ctx.path === "/passkey/verify-authentication",
     handler: createAuthMiddleware(async (ctx) => {
       const needsChallenge = ctx.context.newSession?.user.twoFactorEnabled;
+      const signingInUserId = ctx.context.newSession?.user.id;
       const destination = ctx.context.responseHeaders?.get("location");
       // Middleware runtime supports returnHeaders; the plugin's public return type
       // only describes its JSON body. Preserve all cookies from the nested call.
@@ -20,6 +23,11 @@ export function accountTwoFactor() {
       };
       result.headers?.forEach((value, key) => { if (key.toLowerCase() !== "set-cookie") ctx.setHeader(key, value); });
       for (const cookie of result.headers?.getSetCookie() ?? []) ctx.setHeader("set-cookie", cookie);
+      const method = loginMethodForPath(ctx.path, ctx.params?.id);
+      if (needsChallenge && !ctx.context.newSession && signingInUserId && method) {
+        const pending = ctx.context.createAuthCookie(pendingLoginMethodCookie, { maxAge: 600 });
+        await ctx.setSignedCookie(pending.name, `${method}:${signingInUserId}`, ctx.context.secret, pending.attributes);
+      }
       if (needsChallenge && !ctx.context.newSession && destination) {
         const url = new URL(destination, ctx.context.baseURL);
         const next = url.origin === new URL(ctx.context.baseURL).origin ? url.pathname + url.search : "/dashboard";

@@ -6,6 +6,12 @@ as appropriate. The package's `0.1.0` version is not a claim of a tagged release
 
 ## Unreleased
 
+### 2026-11-15
+
+#### Added
+
+- Remember the last successful sign-in method in a browser cookie, including completed two-factor challenges.
+
 ### 2026-11-05
 
 #### Added
