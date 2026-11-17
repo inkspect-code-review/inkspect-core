@@ -15,6 +15,7 @@ as appropriate. The package's `0.1.0` version is not a claim of a tagged release
 
 #### Changed
 
+- Upgrade Next.js and eslint-config-next to 16.4.6.
 - Expand the review model catalog for OpenAI, Anthropic, and Google while preserving existing selections and conservative execution limits.
 
 ### 2026-11-15
