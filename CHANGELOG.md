@@ -6,6 +6,17 @@ as appropriate. The package's `0.1.0` version is not a claim of a tagged release
 
 ## Unreleased
 
+### 2026-11-17
+
+#### Added
+
+- Include open finding counts and severity indicators in review history using stored lifecycle data.
+- Forward explicit fix options through the authenticated review route.
+
+#### Changed
+
+- Expand the review model catalog for OpenAI, Anthropic, and Google while preserving existing selections and conservative execution limits.
+
 ### 2026-11-15
 
 #### Added

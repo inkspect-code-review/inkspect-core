@@ -21,3 +21,15 @@ test("shared BYOK catalog satisfies the Rust credential contract and isolates pr
   assert.ok(identities.size > 0);
   assert.equal(supportedModel("openai", "unlisted-model"), undefined);
 });
+
+
+test("expanded review models are accepted without enabling non-review models", () => {
+  for (const [provider, ids] of Object.entries({
+    openai: ["gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-sol", "gpt-5.5", "gpt-5.4-mini"],
+    anthropic: ["claude-sonnet-5-5", "claude-fable-5-2", "claude-opus-4-6", "claude-haiku-4-5"],
+    google: ["gemini-3.8-flash", "gemini-4-argon", "gemini-4-carbon", "gemini-4-hydrogen", "gemini-3.5-flash-lite"],
+  })) for (const id of ids) assert.ok(supportedModel(provider, id), `${provider}/${id}`);
+  for (const [provider, id] of [["openai", "gpt-image-2.6-sunburst"], ["anthropic", "claude-mythos-5-2"], ["google", "gemini-3.8-live"], ["google", "gemini-3-pro-image"]]) {
+    assert.equal(supportedModel(provider, id), undefined);
+  }
+});

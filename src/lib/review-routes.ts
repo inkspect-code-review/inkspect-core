@@ -9,7 +9,7 @@ import type { Repository } from "./github";
 import type { ReportResponse, ReviewJob, ReviewRepository } from "./review-types";
 import { buildOverview, cachedDigest, digestReport, rememberDigest, type OverviewRepositoryJobs, type ReportDigest } from "./review-overview";
 import { storedReviewModels } from "./review-models";
-import { newestReviews } from "./review-history";
+import { newestReviews, reviewsWithFindingSummaries } from "./review-history";
 import { loadFindings, parseFindingsQuery } from "./findings";
 import { storedReviewRepositories } from "./review-repositories";
 import { findingStatusStore } from "./finding-status-store";
@@ -44,6 +44,15 @@ export async function handleReviews(request: Request, auth: Auth, send = engineR
       }
       return [...targets.values()];
     })();
+    const withFindingSummaries = async (rows: ReviewJob[], target: typeof activeTargets[number]) => {
+      if (!rows.some(row => row.job.status === "completed")) return rows;
+      try {
+        return reviewsWithFindingSummaries(rows, await statuses.read({ repositoryId: target.repo.id, repository: target.repo.fullName, claims: connectionClaims(target.connection, target.repo.id) }));
+      } catch (error) {
+        captureError("review.history.finding_status", error, { repositoryId: target.repo.id });
+        return rows;
+      }
+    };
     if (request.method === "POST" && action === "finding-status") {
       const target = (await historyTargets()).find(target => target.repo.id === repository);
       if (!target) throw new ReviewError(403, "This repository has no saved review access in this workspace.");
@@ -75,13 +84,13 @@ export async function handleReviews(request: Request, auth: Auth, send = engineR
       const targets = await historyTargets();
       const rows: ReviewJob[] = [];
       let unavailable = 0;
-      // Only history metadata is fetched; reports remain on-demand. Each worker
-      // receives its own authenticated repository/installation identity.
+      // Load compact finding lifecycle summaries from stored records, without
+      // fetching individual reports or contacting GitHub.
       for (let start = 0; start < targets.length; start += 4) {
         const outcomes = await Promise.allSettled(targets.slice(start, start + 4).map(async ({ connection, repo }) => {
           const result = await send("/jobs", "GET", undefined, connectionClaims(connection, repo.id));
           await lifecycle.settle(access.organizationId, result);
-          return (Array.isArray(result.reviews) ? result.reviews : []).filter((row: ReviewJob) => row.snapshot.repository_id === String(repo.id));
+          return withFindingSummaries((Array.isArray(result.reviews) ? result.reviews : []).filter((row: ReviewJob) => row.snapshot.repository_id === String(repo.id)), { connection, repo });
         }));
         for (const outcome of outcomes) {
           if (outcome.status === "fulfilled") rows.push(...outcome.value);
@@ -151,7 +160,12 @@ export async function handleReviews(request: Request, auth: Auth, send = engineR
       const target = (await historyTargets()).find(target => target.repo.id === repository);
       if (!target) throw new ReviewError(403, "This repository has no saved review access in this workspace.");
       const claims = connectionClaims(target.connection, repository);
-      if (action === "jobs") { const result = await send("/jobs", "GET", undefined, claims); await lifecycle.settle(access.organizationId, result); return reviewJSON(result); }
+      if (action === "jobs") {
+        const result = await send("/jobs", "GET", undefined, claims);
+        await lifecycle.settle(access.organizationId, result);
+        const rows = (Array.isArray(result.reviews) ? result.reviews : []).filter((row: ReviewJob) => row.snapshot.repository_id === String(repository));
+        return reviewJSON({ ...result, reviews: await withFindingSummaries(rows, target) });
+      }
       if (!jobId) throw new ReviewError(400, "Choose a review.");
       if (action === "activity") {
         const after = Number(url.searchParams.get("after") || 0);
@@ -159,6 +173,7 @@ export async function handleReviews(request: Request, auth: Auth, send = engineR
         return reviewJSON(await send(`/jobs/${jobId}/activity?after=${after}`, "GET", undefined, claims));
       }
       const result = await send(`/jobs/${jobId}${action === "report" ? "/report" : ""}`, "GET", undefined, claims);
+      if (action === "job") return reviewJSON((await withFindingSummaries([result as ReviewJob], target))[0]);
       if (action === "report") {
         try {
           const lifecycle = await statuses.read({ repositoryId: repository, repository: target.repo.fullName, claims });
@@ -227,9 +242,13 @@ export async function handleReviews(request: Request, auth: Auth, send = engineR
       }
     }
     if (action === "fix" && jobId && ["GET", "POST"].includes(request.method)) {
-      if (request.method === "POST") await readReviewJSON(request);
+      const input = request.method === "POST" ? await readReviewJSON(request) : undefined;
+      // Forward consent/retry intent only; browsers cannot provide repair bytes,
+      // publication branches or other executor inputs.
+      const body = input ? { ...(input.retry_of !== undefined ? { retry_of: input.retry_of } : {}),
+        ...(input.approval !== undefined ? { approval: input.approval } : {}) } : undefined;
       const checkPull = request.method === "GET" && url.searchParams.get("checkPull") === "1";
-      return reviewJSON(await send(`/jobs/${jobId}/fix${checkPull ? "?check_pull=1" : ""}`, request.method as "GET" | "POST", request.method === "POST" ? {} : undefined, claims));
+      return reviewJSON(await send(`/jobs/${jobId}/fix${checkPull ? "?check_pull=1" : ""}`, request.method as "GET" | "POST", body, claims));
     }
     if (request.method === "POST") {
       const body = await readReviewJSON(request);
