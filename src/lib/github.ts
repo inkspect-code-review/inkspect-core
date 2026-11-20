@@ -1,4 +1,5 @@
 import { requiresAccountOnboarding } from "./account-onboarding-config";
+import { workspacePolicy } from "./workspace-policy";
 import { captureError } from "./diagnostics/server";
 import { safePath } from "./diagnostics/sanitize";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
@@ -32,6 +33,7 @@ export async function workspaceAdmin(auth: Auth, requestHeaders: Headers, organi
     { field: "userId", value: session.user.id }, { field: "organizationId", value: id },
   ] });
   if (!member?.role.split(",").some((role) => ["owner", "admin"].includes(role.trim()))) throw new Error("forbidden");
+  await workspacePolicy(auth)?.assertAccess(id);
   return { userId: session.user.id, organizationId: id };
 }
 
@@ -96,6 +98,8 @@ export async function saveConnection(auth: Auth, organizationId: string, connect
   const { adapter } = await auth.$context;
   await adapter.transaction(async (tx) => {
     await tx.update({ model: "organization", where: [{ field: "id", value: organizationId }], update: { id: organizationId } });
+    await workspacePolicy(auth)?.assertAccess(organizationId);
+    await workspacePolicy(auth)?.beforeSaveConnection?.(tx, organizationId, connection, accountId);
     const bound = await tx.findOne<GitHubConnection>({ model: "githubConnection", where: [{ field: "installationId", value: connection.installationId }] });
     if (bound && bound.organizationId !== organizationId) throw new Error("installation-already-connected");
     if (!connection.repositories.length && !bound) throw new Error("no-admin-repositories");

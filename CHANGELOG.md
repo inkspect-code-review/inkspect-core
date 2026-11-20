@@ -6,6 +6,12 @@ as appropriate. The package's `0.1.0` version is not a claim of a tagged release
 
 ## Unreleased
 
+### 2026-11-18
+
+#### Added
+
+- Add optional workspace access and verified connection policies without changing default behavior.
+
 ### 2026-11-17
 
 #### Added

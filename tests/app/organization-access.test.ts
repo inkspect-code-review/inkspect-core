@@ -3,6 +3,16 @@ import test from "node:test";
 import { organizationAccess } from "../../src/lib/organization-access";
 import type { Auth } from "../../src/lib/github";
 import { ReviewError } from "../../src/lib/review-access";
+import { registerWorkspacePolicy } from "../../src/lib/workspace-policy";
+
+test("application workspace policy runs after membership and does not affect other auth instances", async () => {
+  const restricted = fixture("owner").auth;
+  const seen: string[] = [];
+  registerWorkspacePolicy(restricted, { async assertAccess(id) { seen.push(id); throw new ReviewError(403, "Workspace unavailable"); } });
+  await assert.rejects(organizationAccess(request(), restricted), /Workspace unavailable/);
+  assert.deepEqual(seen, ["org-1"]);
+  assert.equal((await organizationAccess(request(), fixture("owner").auth)).organizationId, "org-1");
+});
 
 function fixture(role: string | null = "member", signedIn = true) {
   const lookups: unknown[] = [];

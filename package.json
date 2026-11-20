@@ -222,7 +222,9 @@
     "./migrations/010_review_models.sql": "./migrations/010_review_models.sql",
     "./migrations/015_chat_actions.sql": "./migrations/015_chat_actions.sql",
     "./cli/dev-logs": "./src/cli/dev-logs.ts",
-    "./lib/model-transport": "./src/lib/model-transport.ts"
+    "./lib/model-transport": "./src/lib/model-transport.ts",
+    "./lib/workspace-policy": "./src/lib/workspace-policy.ts",
+    "./lib/workspace-policy.ts": "./src/lib/workspace-policy.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",
