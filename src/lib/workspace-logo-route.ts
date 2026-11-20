@@ -1,3 +1,5 @@
+import { workspacePolicy } from "./workspace-policy";
+import { ReviewError } from "./review-access";
 import { requiresAccountOnboarding } from "./account-onboarding-config";
 import { ageConfirmationRequired } from "./account-onboarding";
 import { randomUUID } from "node:crypto";
@@ -53,6 +55,7 @@ export async function handleWorkspaceLogo(request: Request, auth: Auth, storage:
     const memberWhere = [{ field: "userId", value: session.user.id }, { field: "organizationId", value: organizationId }];
     const member = await adapter.findOne<{ id: string; role: string }>({ model: "member", where: memberWhere });
     if (!member) throw new LogoError(403, "You no longer have access to this workspace.");
+    await workspacePolicy(auth)?.assertAccess(organizationId);
     if (writing && !canManage(member.role)) throw new LogoError(403, "Only workspace owners and admins can change the logo.");
     const organizationWhere = [{ field: "id", value: organizationId }];
     if (!writing) {
@@ -85,6 +88,7 @@ export async function handleWorkspaceLogo(request: Request, auth: Auth, storage:
     if (previous) await storage.remove(organizationId, previous).catch(error => captureError("workspace-logo.cleanup", error));
     return json({ logo });
   } catch (error) {
+    if (error instanceof ReviewError) return json({ error: error.message }, error.status);
     if (!(error instanceof LogoError)) captureError("workspace-logo.failure", error);
     return json({ error: error instanceof LogoError ? error.message : "Couldn’t update or load the workspace logo. Please try again." }, error instanceof LogoError ? error.status : 503);
   }

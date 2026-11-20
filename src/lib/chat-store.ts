@@ -1,3 +1,4 @@
+import { workspacePolicy } from "./workspace-policy";
 import { requiresAccountOnboarding } from "./account-onboarding-config";
 import { ageConfirmationRequired } from "./account-onboarding";
 import { parseChatActions } from "./chat-actions";
@@ -52,6 +53,7 @@ export async function handleWorkspaceChat(request: Request, auth: Auth, reply: C
     const { adapter } = await auth.$context;
     const member = await adapter.findOne<{ id: string }>({ model: "member", where: [{ field: "userId", value: session.user.id }, { field: "organizationId", value: organizationId }] });
     if (!member) throw new ChatError(403, "You no longer have access to this workspace.");
+    await workspacePolicy(auth)?.assertAccess(organizationId);
     const body = request.method === "GET" ? {} : await readBody(request);
     const conversationId = request.method === "GET" ? url.searchParams.get("conversationId") : body.conversationId;
     let conversation: Conversation | null = null;

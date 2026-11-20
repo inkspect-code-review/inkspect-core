@@ -1,3 +1,5 @@
+import { workspacePolicy } from "./workspace-policy";
+import { ReviewError } from "./review-access";
 import { requiresAccountOnboarding } from "./account-onboarding-config";
 import { ageConfirmationRequired } from "./account-onboarding";
 import { captureError } from "./diagnostics/server";
@@ -48,6 +50,7 @@ export async function handleKnowledge(request: Request, auth: Auth) {
     const memberWhere = [{ field: "userId", value: session.user.id }, { field: "organizationId", value: organizationId }];
     const member = await adapter.findOne<{ id: string; role: string }>({ model: "member", where: memberWhere });
     if (!member) throw new KnowledgeError(403, "You no longer have access to this workspace.");
+    await workspacePolicy(auth)?.assertAccess(organizationId);
     const where = [{ field: "organizationId", value: organizationId }];
     if (request.method === "GET") {
       const id = url.searchParams.get("documentId");
@@ -100,7 +103,7 @@ export async function handleKnowledge(request: Request, auth: Auth) {
     return json({ document: present(document) }, request.method === "POST" ? 201 : 200);
   } catch (error) {
     captureError("knowledge.failure", error);
-    if (error instanceof KnowledgeError) return json({ error: error.message }, error.status);
+    if (error instanceof KnowledgeError || error instanceof ReviewError) return json({ error: error.message }, error.status);
     return json({ error: "Couldn’t complete the document request. Please try again." }, 500);
   }
 }

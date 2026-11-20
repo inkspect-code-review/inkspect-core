@@ -6,6 +6,12 @@ as appropriate. The package's `0.1.0` version is not a claim of a tagged release
 
 ## Unreleased
 
+### 2026-11-20
+
+#### Fixed
+
+- Check workspace access before handling review, realtime, chat, knowledge and logo requests.
+
 ### 2026-11-18
 
 #### Added
