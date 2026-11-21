@@ -9,6 +9,13 @@ import { prepareChatInput, converse, bedrockConfig } from "../../src/lib/bedrock
 const config = {key:"test",region:"eu-west-2",model:"amazon.nova-pro-v1:0",inputRate:10n,outputRate:20n,cacheReadRate:2n,cacheWriteRate:12n};
 const source = (id: string, score = .9) => ({id,score,repository:"org/repo",repositoryId:1,revision:"a".repeat(40),path:`src/${id}.ts`,startLine:1,endLine:5,content:`export function ${id}() {}`,url:`https://github.com/org/repo/blob/${"a".repeat(40)}/src/${id}.ts#L1-L5`});
 
+test("answer prompt reflects the text-only composer even without product guide evidence", async () => {
+  const {input} = await prepareChatInput([{role:"user", content:"What should I share?"}],
+    {sources:[], repositories:[], incomplete:false}, undefined, fetch, config);
+  assert.match(input.system[0].text ?? "", /chat accepts text only/);
+  assert.match(input.system[0].text ?? "", /exact error text/);
+});
+
 test("malformed rewriting falls back to the original question without excluding its topic", () => {
   for (const content of ['recipe', '{"intent":"repository"}', JSON.stringify({intent:"repository",language:"tr",query:""}), JSON.stringify({intent:"repository",language:"en",query:"valid",url:"https://attacker"})]) {
     assert.deepEqual(parseChatRoute(content,"tr","makarna tarifi ver"),{intent:"repository",language:"tr",query:"makarna tarifi ver"});

@@ -2,21 +2,24 @@ import { AIError } from "./bedrock";
 import { retrieveChatContext, type ChatContext, type ChatRepository } from "./chat-context";
 import { searchKnowledge } from "./chat-knowledge";
 import { readLatestReviews } from "./chat-review-tools";
-import type { ChatRoute } from "./chat-routing";
+import type { ChatRoute, ProductGuide } from "./chat-routing";
 import type { ChatProgress } from "./chat-progress";
 
 // Closed read-only registry: the planner cannot supply SQL, endpoints, claims,
 // organization IDs, credentials, or mutation functions.
-export async function gatherChatEvidence(input:{organizationId:string;userId:string;messageId:string;repositories:ChatRepository[];onProgress?:(stage:ChatProgress)=>void},plan:ChatRoute,dependencies:{search?:typeof retrieveChatContext;reviews?:typeof readLatestReviews;knowledge?:typeof searchKnowledge}={}):Promise<ChatContext> {
+export async function gatherChatEvidence(input:{organizationId:string;userId:string;messageId:string;repositories:ChatRepository[];onProgress?:(stage:ChatProgress)=>void},plan:ChatRoute,dependencies:{productGuides?:readonly ProductGuide[];search?:typeof retrieveChatContext;reviews?:typeof readLatestReviews;knowledge?:typeof searchKnowledge}={}):Promise<ChatContext> {
  let repositories=input.repositories;
- if(!repositories.length && !(plan.tools?.length===1 && plan.tools[0]==="knowledge_search"))throw new AIError(409,"Connect a repository before asking about your projects.");
+ const productGuides = (plan.guides ?? []).flatMap(id => dependencies.productGuides?.find(guide => guide.id === id) ?? []);
+ const tools = new Set(plan.tools);
+ if (!tools.size && !productGuides.length) tools.add("repository_search");
+ const needsRepositories = [...tools].some(tool => tool !== "knowledge_search");
+ if(!repositories.length && needsRepositories)throw new AIError(409,"Connect a repository before asking about your projects.");
  if(plan.repositories?.length){
   const names=new Set(plan.repositories.map(name=>name.toLowerCase()));
   repositories=repositories.filter(repo=>names.has(repo.fullName.toLowerCase()));
   if(new Set(repositories.map(repo=>repo.fullName.toLowerCase())).size!==names.size)throw new AIError(400,"Include the requested repositories in the chat selection before comparing them.");
  }
- const tools=new Set(plan.tools||["repository_search"]);
- if(plan.retrieval==="inspection" || tools.has("latest_reviews"))tools.add("knowledge_search");
+ if((tools.size > 0 && plan.retrieval==="inspection") || tools.has("latest_reviews"))tools.add("knowledge_search");
  let context:ChatContext={sources:[],repositories:repositories.map(repo=>repo.fullName),incomplete:false,mode:"repository"};
  if(tools.has("repository_search")){
   input.onProgress?.("gathering");
@@ -32,5 +35,6 @@ export async function gatherChatEvidence(input:{organizationId:string;userId:str
   context.knowledge=await (dependencies.knowledge||searchKnowledge)({...input,query:plan.knowledgeQuery||plan.query});
   context.incomplete ||= context.knowledge.incomplete;
  }
+ if (productGuides.length) context.productGuides = productGuides;
  return context;
 }

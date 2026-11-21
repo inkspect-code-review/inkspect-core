@@ -1,6 +1,6 @@
 import { chatIndexActions } from "./chat-actions";
 import type { ChatProgress } from "./chat-progress";
-import { routeChat, noEvidenceReply, type ChatRoute } from "./chat-routing";
+import { routeChat, noEvidenceReply, type ChatRoute, type ProductGuide } from "./chat-routing";
 import { gatherChatEvidence } from "./chat-tools";
 import { generateChatTitle } from "./chat-title";
 import { captureError } from "./diagnostics/server";
@@ -19,7 +19,7 @@ export interface ChatLedger {
   delivered(messageId: string): Promise<void>;
   deleteConversation(organization: string, conversationId: string): Promise<void>;
 }
-export type ChatGenerationOptions = { fetcher?: typeof fetch; retrieve?: typeof retrieveChatContext; route?: typeof routeChat; tools?: Parameters<typeof gatherChatEvidence>[2] };
+export type ChatGenerationOptions = { productGuides?: readonly ProductGuide[]; fetcher?: typeof fetch; retrieve?: typeof retrieveChatContext; route?: typeof routeChat; tools?: Parameters<typeof gatherChatEvidence>[2] };
 
 export function createChatReplyService(ledger: ChatLedger, options: ChatGenerationOptions = {}): ChatReplyService {
 async function generateReply(input: ChatReplyInput) {
@@ -34,16 +34,16 @@ async function generateReply(input: ChatReplyInput) {
     let routingUsage: AIReply | undefined;
     try {
       input.onProgress?.("thinking");
-      const routed = await (options.route || routeChat)(input.messages, input.repositoryNames, options.fetcher || fetch);
+      const routed = await (options.route || routeChat)(input.messages, input.repositoryNames, options.fetcher || fetch, options.productGuides);
       route = routed.route;
       routingUsage = routed.usage;
     } finally {
       await ledger.routing(input, route, routingUsage);
     }
     await ledger.check(input, "search");
-    const context = await gatherChatEvidence({...input,repositories:input.repositories||[]},route,{...options.tools,search:options.retrieve||options.tools?.search});
+    const context = await gatherChatEvidence({...input,repositories:input.repositories||[]},route,{...options.tools,productGuides:options.productGuides,search:options.retrieve||options.tools?.search});
     input.onProgress?.("answering");
-    if (!context.sources.length && !context.reviewResults?.length && !context.knowledge && !context.indexAvailability?.length) {
+    if (!context.productGuides?.length && !context.sources.length && !context.reviewResults?.length && !context.knowledge && !context.indexAvailability?.length) {
       reply = noEvidenceReply(route.language);
       input.onDelta?.(reply.content);
     } else {
