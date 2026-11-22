@@ -3,10 +3,10 @@ import { AIError } from "./bedrock";
 import { ReviewError } from "./review-access";
 import { engineRequest } from "./engine-client";
 import type { ChatReviewResult, ChatKnowledgeResult } from "./chat-review-evidence";
-import type { ChatRetrieval } from "./chat-routing";
+import type { ChatRetrieval, ProductGuide } from "./chat-routing";
 export type ChatRepository={id:number;fullName:string;connectionId:string;installationId:number};
 export type ChatSource={id:string;repository:string;repositoryId:number;revision:string;path:string;startLine:number;endLine:number;content:string;url:string};
-export type ChatContext={indexAvailability?:ChatIndexAvailability[];mode?:"repository"|"general";retrieval?:ChatRetrieval;selection?:{candidates:number;selected:number;minScore:number};reviewResults?:ChatReviewResult[];knowledge?:ChatKnowledgeResult;toolResultsTruncated?:boolean;sources:ChatSource[];repositories:string[];incomplete:boolean;repositoryCoverage?:{requested:number;searched:number;represented:number;unrepresented:string[]};historyTruncated?:boolean;searchQueryTruncated?:boolean};
+export type ChatContext={productGuides?: ProductGuide[];indexAvailability?:ChatIndexAvailability[];mode?:"repository"|"general";retrieval?:ChatRetrieval;selection?:{candidates:number;selected:number;minScore:number};reviewResults?:ChatReviewResult[];knowledge?:ChatKnowledgeResult;toolResultsTruncated?:boolean;sources:ChatSource[];repositories:string[];incomplete:boolean;repositoryCoverage?:{requested:number;searched:number;represented:number;unrepresented:string[]};historyTruncated?:boolean;searchQueryTruncated?:boolean};
 type IndexRequired={kind:"index_required";tenant_id:string;repository_id:string;state:ChatIndexAvailability["state"];can_index:boolean};
 type Packet={revision:{tenant_id:string;provider:string;provider_instance:string;repository_id:string;revision_id:string};snapshot:string;snippets:{path:string;start_line:number;end_line:number;content:string;score:number}[];omissions?:unknown[]};
 export async function retrieveChatContext(input:{organizationId:string;userId:string;messageId:string;question:string;retrieval?:ChatRetrieval;requestedRepositories?:string[];repositories:ChatRepository[]},send=engineRequest):Promise<ChatContext>{

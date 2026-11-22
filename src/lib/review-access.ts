@@ -1,3 +1,4 @@
+import { workspacePolicy } from "./workspace-policy";
 import { requiresAccountOnboarding } from "./account-onboarding-config";
 import { ageConfirmationRequired } from "./account-onboarding";
 import { captureError } from "./diagnostics/server";
@@ -16,6 +17,7 @@ export async function reviewAccess(request: Request, auth: Auth, { allowUnconnec
   const { adapter } = await auth.$context;
   const member = await adapter.findOne<{ role: string }>({ model: "member", where: [{ field: "userId", value: session.user.id }, { field: "organizationId", value: organizationId }] });
   if (!member) throw new ReviewError(403, "You no longer have access to this workspace.");
+  await workspacePolicy(auth)?.assertAccess(organizationId);
   const connections = await adapter.findMany<GitHubConnection>({ model: "githubConnection", where: [{ field: "organizationId", value: organizationId }], limit: 10_000 });
   if (!connections.length && !allowUnconnected) throw new ReviewError(409, "Connect GitHub to review a pull request.");
   return { userId: session.user.id, organizationId, member, connections };

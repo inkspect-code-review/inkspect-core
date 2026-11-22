@@ -1,8 +1,23 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { handleWorkspaceChat } from "../../src/lib/chat-store";
+import { handleKnowledge } from "../../src/lib/knowledge-store";
+import { authorizeRealtime } from "../../src/lib/realtime";
+import { handleRepositories } from "../../src/lib/repository-routes";
+import { handleWorkspaceLogo } from "../../src/lib/workspace-logo-route";
 import { organizationAccess } from "../../src/lib/organization-access";
 import type { Auth } from "../../src/lib/github";
 import { ReviewError } from "../../src/lib/review-access";
+import { registerWorkspacePolicy } from "../../src/lib/workspace-policy";
+
+test("application workspace policy runs after membership and does not affect other auth instances", async () => {
+  const restricted = fixture("owner").auth;
+  const seen: string[] = [];
+  registerWorkspacePolicy(restricted, { async assertAccess(id) { seen.push(id); throw new ReviewError(403, "Workspace unavailable"); } });
+  await assert.rejects(organizationAccess(request(), restricted), /Workspace unavailable/);
+  assert.deepEqual(seen, ["org-1"]);
+  assert.equal((await organizationAccess(request(), fixture("owner").auth)).organizationId, "org-1");
+});
 
 function fixture(role: string | null = "member", signedIn = true) {
   const lookups: unknown[] = [];
@@ -63,5 +78,32 @@ test("workspace mutations require the configured origin even for owners", async 
       assert.deepEqual(lookups, []);
     }
     assert.equal((await organizationAccess(request("org-1", method, "https://workspace.example"), fixture("owner").auth)).canManage, true);
+  }
+});
+
+test("workspace routes reject a restricted member before reading workspace data", async () => {
+  const { auth, lookups } = fixture("owner");
+  const downstream = () => assert.fail("Downstream service called");
+  registerWorkspacePolicy(auth, {
+    async assertAccess(id) {
+      assert.equal(id, "org-1");
+      throw new ReviewError(403, "Workspace unavailable");
+    },
+  });
+  for (const handler of [
+    () => handleRepositories(request(), auth, downstream),
+    () => authorizeRealtime(request("org-1", "POST", "https://workspace.example"), auth, downstream),
+    () => handleWorkspaceChat(request(), auth, downstream),
+    () => handleKnowledge(request(), auth),
+    () => handleWorkspaceLogo(request(), auth),
+    () => handleWorkspaceLogo(request("org-1", "DELETE", "https://workspace.example"), auth),
+  ]) {
+    lookups.length = 0;
+    const response = await handler();
+    assert.equal(response.status, 403);
+    assert.deepEqual(await response.json(), { error: "Workspace unavailable" });
+    assert.deepEqual(lookups, [{ model: "member", where: [
+      { field: "userId", value: "user-1" }, { field: "organizationId", value: "org-1" },
+    ] }]);
   }
 });

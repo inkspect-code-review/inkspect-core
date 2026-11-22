@@ -1,7 +1,9 @@
 import type { Auth } from "./github";
+import { workspacePolicy } from "./workspace-policy";
 import { githubConfig, type GitHubConnection, type Repository } from "./github";
 
 export async function workspaceStatus(organizationId: string, userId: string, auth: Auth) {
+  await workspacePolicy(auth)?.assertAccess(organizationId);
   const { adapter } = await auth.$context;
   const where = [{ field: "organizationId", value: organizationId }];
   const [member, connections, setup] = await Promise.all([

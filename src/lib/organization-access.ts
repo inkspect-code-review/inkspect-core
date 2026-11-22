@@ -1,4 +1,5 @@
 import type { Auth } from "./github";
+import { workspacePolicy } from "./workspace-policy";
 import { ReviewError } from "./review-access";
 import { requiresAccountOnboarding } from "./account-onboarding-config";
 import { ageConfirmationRequired } from "./account-onboarding";
@@ -14,5 +15,6 @@ export async function organizationAccess(request: Request, auth: Auth) {
   const { adapter } = await auth.$context;
   const member = await adapter.findOne<{ role: string }>({ model: "member", where: [{ field: "userId", value: session.user.id }, { field: "organizationId", value: organizationId }] });
   if (!member) throw new ReviewError(403, "You no longer have access to this workspace.");
+  await workspacePolicy(auth)?.assertAccess(organizationId);
   return { organizationId, user: session.user, canManage: member.role.split(",").some((r) => ["owner", "admin"].includes(r.trim())), adapter };
 }

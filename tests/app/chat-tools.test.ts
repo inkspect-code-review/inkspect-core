@@ -107,3 +107,26 @@ test("planner defaults to configured chat intelligence without reusing small-mod
  assert.equal(chatRoutingModel(env),env.INKSPECT_DEFAULT_CHAT_MODEL);assert.equal(routingConfig(env).inputRate,2000n);
  assert.equal(chatRoutingModel({...env,INKSPECT_CHAT_ROUTING_MODEL:"amazon.nova-micro-v1:0"}),"amazon.nova-micro-v1:0");
 });
+
+test("product help can use registered guides alone or alongside scoped repository evidence", async () => {
+ const guide = { id: "setup", title: "Workspace setup", url: "https://example.com/setup", content: "Open settings." };
+ const plan = { intent: "repository", language: "tr", query: "setup", guides: ["setup"], tools: [] };
+ const route = parseChatRoute(JSON.stringify(plan), "tr", "original", [guide]);
+ const noSearch = async () => assert.fail("Pure product help must not read workspace data");
+ const context = await gatherChatEvidence({...input, repositories: []}, route, {
+   productGuides: [guide], search: noSearch, knowledge: noSearch, reviews: noSearch,
+ });
+ assert.deepEqual(context.productGuides, [guide]);
+ for (const invalid of [parseChatRoute(JSON.stringify(plan)), parseChatRoute(JSON.stringify({...plan, guides:["unknown"]}), "tr", "original", [guide])]) {
+   assert.equal(invalid.guides, undefined);
+   assert.equal(invalid.tools, undefined);
+ }
+ const mixed = await gatherChatEvidence(input, {...route, tools:["repository_search"]}, {
+   productGuides: [guide], search: async args => {
+     assert.deepEqual(args.repositories, [repo]);
+     return { sources:[], repositories:[repo.fullName], incomplete:false };
+   },
+ });
+ assert.deepEqual(mixed.productGuides, [guide]);
+ assert.deepEqual(mixed.repositories, [repo.fullName]);
+});
