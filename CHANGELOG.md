@@ -10,6 +10,8 @@ as appropriate. The package's `0.1.0` version is not a claim of a tagged release
 
 #### Changed
 
+- Trace self-hosted sign-in from the PostgreSQL runtime to the shared auth factory and add a standalone sign-in test example.
+
 - Simplify the library overview and local development instructions.
 
 #### Added
