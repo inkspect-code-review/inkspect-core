@@ -8,6 +8,10 @@ as appropriate. The package's `0.1.0` version is not a claim of a tagged release
 
 ### 2026-11-26
 
+#### Changed
+
+- Simplify the library overview and local development instructions.
+
 #### Added
 
 - Support additional OAuth providers in the authentication factory and recognize X for account linking and remembered sign-ins.
