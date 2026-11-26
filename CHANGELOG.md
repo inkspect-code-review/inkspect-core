@@ -12,6 +12,10 @@ as appropriate. The package's `0.1.0` version is not a claim of a tagged release
 
 - Support additional OAuth providers in the authentication factory and recognize X for account linking and remembered sign-ins.
 
+#### Fixed
+
+- Refresh repository connections and findings across tabs when their data changes.
+
 ### 2026-11-21
 
 #### Added

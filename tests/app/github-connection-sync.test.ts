@@ -40,22 +40,29 @@ test("a completed GitHub update refreshes other tabs only for the same user and 
   assert.equal(originalRefreshes, 1, "rendering the same success page again must not cause a refresh loop");
   announceGitHubConnectionChange(scope, "revision-2", callback);
   assert.equal(originalRefreshes, 2);
+  original.dispatchEvent(new Event("focus"));
+  assert.equal(originalRefreshes, 2, "switching tabs does not reload the dashboard");
   stopOriginal(); stopCallback();
   announceGitHubConnectionChange(scope, "revision-3", callback);
   original.dispatchEvent(new Event("focus"));
   assert.equal(originalRefreshes, 2, "leaving a workspace removes its listeners");
 });
 
-test("returning to Inkspect refreshes saved data even when browser storage is blocked", () => {
+test("storage-blocked tabs synchronize changes without reloading on focus", async () => {
   const createTab = browserTabs(true);
-  const original = createTab(), callback = createTab();
+  const original = Object.assign(createTab(), { BroadcastChannel });
+  const callback = Object.assign(createTab(), { BroadcastChannel });
   const scope = { userId: "owner", organizationId: "workspace" };
   let refreshed = 0;
-  const stop = subscribeGitHubConnectionChanges(scope, () => refreshed++, original);
-  assert.doesNotThrow(() => announceGitHubConnectionChange(scope, "revision-1", callback));
-  original.dispatchEvent(new Event("focus"));
-  assert.equal(refreshed, 1);
-  stop();
-  original.dispatchEvent(new Event("focus"));
-  assert.equal(refreshed, 1);
+  let received!: () => void;
+  const update = new Promise<void>(resolve => { received = resolve; });
+  const stop = subscribeGitHubConnectionChanges(scope, () => { refreshed++; received(); }, original);
+  try {
+    original.dispatchEvent(new Event("focus"));
+    assert.equal(refreshed, 0);
+    announceGitHubConnectionChange(scope, "revision-1", callback);
+    await update;
+    original.dispatchEvent(new Event("focus"));
+    assert.equal(refreshed, 1);
+  } finally { stop(); }
 });
