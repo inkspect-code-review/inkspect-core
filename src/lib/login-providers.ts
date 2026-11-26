@@ -3,6 +3,7 @@ export const loginProviders = [
   { id: "google", name: "Google" },
   { id: "microsoft", name: "Microsoft" },
   { id: "apple", name: "Apple" },
+  { id: "twitter", name: "X" },
 ] as const;
 
 export type LoginProvider = typeof loginProviders[number]["id"];
@@ -43,5 +44,7 @@ export function signInMethodSummary(accounts: readonly { providerId: string }[],
   const connected = new Set(accounts.map(({ providerId }) => providerId));
   const available = new Set(availableProviders);
   // Only these display fields cross the server/client boundary, never OAuth tokens.
-  return loginProviders.map(provider => ({ ...provider, connected: connected.has(provider.id), available: available.has(provider.id) }));
+  return loginProviders
+    .filter(({ id }) => id !== "twitter" || available.has(id) || connected.has(id))
+    .map(provider => ({ ...provider, connected: connected.has(provider.id), available: available.has(provider.id) }));
 }

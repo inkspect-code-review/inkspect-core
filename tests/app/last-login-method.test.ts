@@ -11,7 +11,7 @@ const cookies = (response: Response) => response.headers.getSetCookie().map(valu
 const remembered = (response: Response) => response.headers.getSetCookie().find(value => value.startsWith(`${lastLoginMethodCookie}=`));
 
 test("recognizes supported completed sign-in methods only", () => {
-  for (const provider of ["github", "google", "microsoft", "apple"]) {
+  for (const provider of ["github", "google", "microsoft", "apple", "twitter"]) {
     assert.equal(loginMethodForPath(`/callback/${provider}`), provider);
     assert.equal(loginMethodForPath("/callback/:id", provider), provider);
   }

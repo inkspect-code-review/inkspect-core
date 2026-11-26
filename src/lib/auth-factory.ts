@@ -12,6 +12,7 @@ import { accountOnboarding } from "./account-onboarding-plugin";
 import { rememberLastLoginMethod } from "./last-login-method";
 
 export type AuthEditionPolicy = {
+  additionalSocialProviders?: BetterAuthOptions["socialProviders"];
   canCreateOrganization: (user: { id: string; emailVerified: boolean }) => boolean | Promise<boolean>;
   createInvitationMessage: string;
   acceptInvitationMessage: string;
@@ -25,7 +26,7 @@ export function createEditionAuth(database: NonNullable<BetterAuthOptions["datab
     secret: env.secret,
     database,
     trustedOrigins: [env.baseURL, "https://appleid.apple.com"],
-    socialProviders: socialProviders(),
+    socialProviders: { ...socialProviders(), ...policy.additionalSocialProviders },
     // The ingress must overwrite this header and keep the upstream private.
     advanced: { ipAddress: { ipAddressHeaders: ["x-real-ip"] } },
     account: {

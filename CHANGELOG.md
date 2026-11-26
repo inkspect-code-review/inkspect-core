@@ -6,6 +6,12 @@ as appropriate. The package's `0.1.0` version is not a claim of a tagged release
 
 ## Unreleased
 
+### 2026-11-26
+
+#### Added
+
+- Support additional OAuth providers in the authentication factory and recognize X for account linking and remembered sign-ins.
+
 ### 2026-11-21
 
 #### Added
