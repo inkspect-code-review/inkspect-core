@@ -6,6 +6,35 @@ import type { FindingRow, FindingsQuery, FindingsTarget, RepositoryFindings } fr
 import { readFindingLifecycle } from "./finding-status-store";
 import type { FindingLifecycle } from "./finding-status";
 
+// The repository expression is chosen by the calling query, never by the client.
+export function findingPageClauses(options: FindingsQuery, parameter: (value: unknown) => string, repositoryColumn: '$2::bigint' | 'repository_id::bigint') {
+  const filters: string[] = [];
+  if (options.query) {
+    const search = parameter(options.query);
+    // Literal substring matching: '%' and '_' are file-name characters, not wildcards.
+    filters.push(`(strpos(lower(title), lower(${search})) > 0 OR strpos(lower(path), lower(${search})) > 0)`);
+  }
+  if (options.severity !== 'all') filters.push(`severity = ${parameter(options.severity)}`);
+  if (options.status !== 'all') filters.push(`resolution->>'status' = ${parameter(options.status)}`);
+  const cursor = options.cursor;
+  const ranks: Record<string, number> = { low: 1, medium: 2, high: 3, critical: 4 };
+  // The same key order drives SQL pagination, page ordering and the workspace merge.
+  const keys = [
+    ...(options.sort === 'severity' ? [{ column: 'severity_rank', direction: options.direction, value: cursor ? ranks[cursor.severity] : null, cast: '::int' }] : []),
+    { column: 'created_at', direction: options.sort === 'date' ? options.direction : 'desc', value: cursor?.createdAt, cast: '::timestamptz' },
+    { column: 'job_id COLLATE "C"', direction: 'desc', value: cursor?.jobId, cast: '::text COLLATE "C"' },
+    { column: 'ordinal', direction: 'asc', value: cursor?.ordinal, cast: '::bigint' },
+    { column: repositoryColumn, direction: 'desc', value: cursor?.repositoryId, cast: '::bigint' },
+  ];
+  const orderBy = keys.map(key => `${key.column} ${key.direction === 'asc' ? 'ASC' : 'DESC'}`).join(',');
+  const bounds = cursor ? keys.map(key => `${parameter(key.value)}${key.cast}`) : [];
+  const after = cursor ? `WHERE ${keys.map((key, index) => `(${[
+    ...keys.slice(0, index).map((prior, before) => `${prior.column} = ${bounds[before]}`),
+    `${key.column} ${key.direction === 'asc' ? '>' : '<'} ${bounds[index]}`,
+  ].join(' AND ')})`).join(' OR ')}` : '';
+  return { filters, after, orderBy };
+}
+
 // Each source returns one page plus a lookahead. Reports and history are never
 // downloaded in full just to filter or paginate their findings.
 export async function queryFindingSource(pool: Pool, worker: Worker, options: FindingsQuery, legacy = false, excludedIds: string[] = [], lifecycle?: FindingLifecycle) {
@@ -17,31 +46,8 @@ export async function queryFindingSource(pool: Pool, worker: Worker, options: Fi
   if (options.from) where.push(`created_at >= ${parameter(options.from)}::timestamptz`);
   if (options.before) where.push(`created_at < ${parameter(options.before)}::timestamptz`);
   if (legacy && excludedIds.length) where.push(`NOT (id = ANY(${parameter(excludedIds)}::text[]))`);
-  const filters: string[] = [];
-  if (options.query) {
-    const search = parameter(options.query);
-    // Literal substring matching: '%' and '_' are file-name characters, not wildcards.
-    filters.push(`(strpos(lower(title), lower(${search})) > 0 OR strpos(lower(path), lower(${search})) > 0)`);
-  }
-  if (options.severity !== 'all') filters.push(`severity = ${parameter(options.severity)}`);
-  if (options.status !== 'all') filters.push(`resolution->>'status' = ${parameter(options.status)}`);
   const statuses = parameter(JSON.stringify(lifecycle?.statuses ?? {}));
-  const cursor = options.cursor;
-  const ranks: Record<string, number> = { low: 1, medium: 2, high: 3, critical: 4 };
-  // The same key order drives SQL pagination, page ordering and the workspace merge.
-  const keys = [
-    ...(options.sort === 'severity' ? [{ column: 'severity_rank', direction: options.direction, value: cursor ? ranks[cursor.severity] : null, cast: '::int' }] : []),
-    { column: 'created_at', direction: options.sort === 'date' ? options.direction : 'desc', value: cursor?.createdAt, cast: '::timestamptz' },
-    { column: 'job_id COLLATE "C"', direction: 'desc', value: cursor?.jobId, cast: '::text COLLATE "C"' },
-    { column: 'ordinal', direction: 'asc', value: cursor?.ordinal, cast: '::bigint' },
-    { column: '$2::bigint', direction: 'desc', value: cursor?.repositoryId, cast: '::bigint' },
-  ];
-  const orderBy = keys.map(key => `${key.column} ${key.direction === 'asc' ? 'ASC' : 'DESC'}`).join(',');
-  const bounds = cursor ? keys.map(key => `${parameter(key.value)}${key.cast}`) : [];
-  const after = cursor ? `WHERE ${keys.map((key, index) => `(${[
-    ...keys.slice(0, index).map((prior, before) => `${prior.column} = ${bounds[before]}`),
-    `${key.column} ${key.direction === 'asc' ? '>' : '<'} ${bounds[index]}`,
-  ].join(' AND ')})`).join(' OR ')}` : '';
+  const { filters, after, orderBy } = findingPageClauses(options, parameter, '$2::bigint');
   const source = legacy
     ? `SELECT j.id,j.status,j.created_at,j.request,j.request AS snapshot,r.report
        FROM ${schema}.jobs j LEFT JOIN ${schema}.runs r ON r.tenant_id=j.tenant_id AND r.id=j.id
@@ -76,10 +82,11 @@ export async function queryFindingSource(pool: Pool, worker: Worker, options: Fi
   })) };
 }
 
-export async function readRepositoryFindings(target: FindingsTarget, options: FindingsQuery): Promise<RepositoryFindings> {
+export async function readRepositoryFindings(target: FindingsTarget, options: FindingsQuery, adjustLifecycle?: (value: FindingLifecycle) => FindingLifecycle): Promise<RepositoryFindings> {
   // Revalidate workspace membership and stored repository ownership on every page.
   const worker = await authorizedStoredWorker(target.claims);
-  const lifecycle = await readFindingLifecycle(target, worker);
+  const stored = await readFindingLifecycle(target, worker);
+  const lifecycle = adjustLifecycle ? adjustLifecycle(stored) : stored;
   const current = await queryFindingSource(database(), worker, options, false, [], lifecycle);
   const legacyPool = database(worker.queue_database);
   const tables = (await legacyPool.query('SELECT to_regclass($1) AS jobs,to_regclass($2) AS runs', [`${worker.queue_schema}.jobs`, `${worker.queue_schema}.runs`])).rows[0];

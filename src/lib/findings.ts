@@ -10,6 +10,7 @@ export type FindingRow = {
   title: string; severity: string; path: string; line: number; advisory: boolean;
   pullNumber: number | null; createdAt: string;
   resolution?: FindingStatusInfo;
+  readOnly?: boolean;
 };
 export type FindingsOrder = { sort: "date" | "severity"; direction: "asc" | "desc" };
 export type FindingCursor = Pick<FindingRow, "createdAt" | "jobId" | "ordinal" | "repositoryId" | "severity"> & FindingsOrder;
@@ -46,7 +47,7 @@ export function parseFindingsQuery(params: URLSearchParams): FindingsQuery {
     try {
       if (encoded.length > 600 || !/^[A-Za-z0-9_-]+$/.test(encoded)) throw new Error();
       const value = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
-      if (typeof value.createdAt !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(value.createdAt) || !Number.isFinite(Date.parse(value.createdAt)) || !/^J-[a-f0-9]{32}$/.test(value.jobId) || !Number.isSafeInteger(value.ordinal) || value.ordinal < 1 || !Number.isSafeInteger(value.repositoryId) || value.repositoryId < 1) throw new Error();
+      if (typeof value.createdAt !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(value.createdAt) || !Number.isFinite(Date.parse(value.createdAt)) || !/^(?:J-[a-f0-9]{32}|[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})$/.test(value.jobId) || !Number.isSafeInteger(value.ordinal) || value.ordinal < 1 || !Number.isSafeInteger(value.repositoryId) || value.repositoryId < 1) throw new Error();
       if (value.sort !== sort || value.direction !== direction || !["critical", "high", "medium", "low"].includes(value.severity)) throw new Error();
       cursor = { createdAt: value.createdAt, jobId: value.jobId, ordinal: value.ordinal, repositoryId: value.repositoryId, severity: value.severity, sort, direction };
     } catch { throw new ReviewError(400, "Invalid findings page. Refresh and try again."); }
@@ -80,8 +81,12 @@ export async function loadFindings(targets: FindingsTarget[], options: FindingsQ
     }
   }
   if (targets.length && unavailableRepositories === targets.length) throw new ReviewError(503, "Findings are temporarily unavailable. Please try again.");
+  return findingsPage(rows, options, { total, unavailableRepositories, unavailableReports });
+}
+
+export function findingsPage(rows: FindingRow[], options: FindingsQuery, counts: Pick<FindingsResponse, "total" | "unavailableRepositories" | "unavailableReports">, hasMore = false): FindingsResponse {
   const sorted = rows.sort((a, b) => compareFindings(a, b, options)), findings = sorted.slice(0, findingsPageSize);
   const last = findings.at(-1);
-  const nextCursor = sorted.length > findingsPageSize && last ? Buffer.from(JSON.stringify({ createdAt: last.createdAt, jobId: last.jobId, ordinal: last.ordinal, repositoryId: last.repositoryId, severity: last.severity, sort: options.sort, direction: options.direction })).toString("base64url") : null;
-  return { findings, total, pageSize: findingsPageSize, nextCursor, unavailableRepositories, unavailableReports };
+  const nextCursor = (hasMore || sorted.length > findingsPageSize) && last ? Buffer.from(JSON.stringify({ createdAt: last.createdAt, jobId: last.jobId, ordinal: last.ordinal, repositoryId: last.repositoryId, severity: last.severity, sort: options.sort, direction: options.direction })).toString("base64url") : null;
+  return { findings, pageSize: findingsPageSize, nextCursor, ...counts };
 }
