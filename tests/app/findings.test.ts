@@ -49,3 +49,13 @@ test("severity sorting uses importance rather than alphabetical order, with dete
   assert.deepEqual([...rows].sort((a, b) => compareFindings(a, b, { sort: "severity", direction: "desc" })).map(row => row.severity), ["critical", "high", "medium", "low"]);
   assert.deepEqual([...rows].sort((a, b) => compareFindings(a, b, { sort: "severity", direction: "asc" })).map(row => row.severity), ["low", "medium", "high", "critical"]);
 });
+
+test("UUID review cursors round-trip with the same ordering as native reviews", async () => {
+  const jobId = "034abbbb-0000-4400-8000-000000000000";
+  const result = await loadFindings([target(1)], options, async () => ({
+    total: 26, unavailableReports: 0, findings: Array.from({length:26}, (_,i) => ({ ...finding(1,1), jobId, ordinal: i+1 })),
+  }));
+  const next = parseFindingsQuery(new URLSearchParams({ cursor: result.nextCursor! }));
+  assert.equal(next.cursor?.jobId, jobId);
+  assert.equal(next.cursor?.ordinal, 25);
+});

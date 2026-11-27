@@ -6,6 +6,10 @@ as appropriate. The package's `0.1.0` version is not a claim of a tagged release
 
 ## Unreleased
 
+- 2026-11-27 — Allow a workspace chat catalog to supply additional repository scopes and read their citations.
+
+- 2026-11-27 — Share findings filters and pagination across review sources and accept UUID review cursors.
+
 ### 2026-11-27
 
 #### Added

@@ -16,6 +16,11 @@ import { loadKnowledgeSource } from "./chat-knowledge";
 import { loadChatSource } from "./chat-source";
 import { ReviewError } from "./review-access";
 
+type ChatRepository = import("./chat-context").ChatRepository;
+type ChatSources = {
+  repositories(organizationId: string, userId: string): Promise<ChatRepository[]>;
+  source: typeof loadChatSource;
+};
 type Auth = ReturnType<typeof createEditionAuth>;
 type Conversation = { id: string; organizationId: string; userId: string; title: string; repositoryScope: string; shared: boolean; createdAt: Date; updatedAt: Date };
 type Message = { id: string; conversationId: string; userId: string; content: string; role?: "user" | "assistant"; clientRequestId?: string; replyToId?: string; sources?: string; actions?: string; createdAt: Date };
@@ -40,7 +45,7 @@ async function readBody(request: Request): Promise<Record<string, unknown>> {
   } catch { throw new ChatError(400, "Invalid request."); }
 }
 
-export async function handleWorkspaceChat(request: Request, auth: Auth, reply: ChatReplyService) {
+export async function handleWorkspaceChat(request: Request, auth: Auth, reply: ChatReplyService, catalog?: ChatSources) {
   const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "private, no-store" } });
   try {
     const url = new URL(request.url);
@@ -82,7 +87,7 @@ export async function handleWorkspaceChat(request: Request, auth: Auth, reply: C
         if (!source) throw new ChatError(404, "This source is not available in this message.");
         if(isReviewReference(source))throw new ChatError(400,"Open the saved review from its source card.");
         const connections = await adapter.findMany<GitHubConnection>({ model: "githubConnection", where: [{ field: "organizationId", value: organizationId }], limit: 10_000 });
-        const loaded = isKnowledgeReference(source) ? await loadKnowledgeSource(source,organizationId,session.user.id) : await loadChatSource(source, organizationId, session.user.id, connections);
+        const loaded = isKnowledgeReference(source) ? await loadKnowledgeSource(source,organizationId,session.user.id) : await (catalog?.source ?? loadChatSource)(source, organizationId, session.user.id, connections);
         // A source read may outlive unsharing, deletion, or membership revocation.
         const access = await adapter.findOne({ model: "member", where: [{ field: "userId", value: session.user.id }, { field: "organizationId", value: organizationId }] });
         const current = await adapter.findOne<Conversation>({ model: "chatConversation", where: [{ field: "id", value: conversation.id }, { field: "organizationId", value: organizationId }] });
@@ -123,7 +128,11 @@ export async function handleWorkspaceChat(request: Request, auth: Auth, reply: C
     const repositoryScope = conversation?.repositoryScope ?? body.repositoryScope;
     if (typeof repositoryScope !== "string") throw new ChatError(400, "Choose a repository scope.");
     const connections = await adapter.findMany<GitHubConnection>({ model: "githubConnection", where: [{ field: "organizationId", value: organizationId }], limit: 10_000 });
-    const repos = connections.flatMap((connection) => JSON.parse(connection.repositories) as Repository[]);
+    const connected = connections.flatMap(c => (JSON.parse(c.repositories) as Repository[]).map(r => ({
+      id: r.id, fullName: r.fullName, connectionId: c.id, installationId: Number(c.installationId),
+    })));
+    const additional = catalog ? await catalog.repositories(organizationId, session.user.id) : [];
+    const repos = [...connected, ...additional.filter(r => !connected.some(c => c.id === r.id))];
     if (repositoryScope !== "all" && !repos.some((repo) => String(repo.id) === repositoryScope)) throw new ChatError(400, "This repository is no longer connected. Start a new conversation.");
     const result = await adapter.transaction(async (tx) => {
       // Serialize writes per member for the rate limit and message cap.
@@ -159,7 +168,7 @@ export async function handleWorkspaceChat(request: Request, auth: Auth, reply: C
         const turns: AIMessage[] = [];
         for (const item of messages) { const last = turns.at(-1); if (last?.role === item.role) {last.content += "\n\n" + item.content;if(item.reviewReferences?.length)last.reviewReferences=[...(last.reviewReferences||[]),...item.reviewReferences];} else turns.push({ ...item }); }
         while (turns[0]?.role === "assistant") turns.shift();
-        const answer = await reply({ onDelta, onProgress, firstMessage: history.filter(item => (item.role || "user") === "user").length === 1, organizationId, userId: session.user.id, messageId: result.message.id, conversationId: result.conversation.id, repositoryId: repositoryScope === "all" ? undefined : repositoryScope, repositories:connections.flatMap(c=>(JSON.parse(c.repositories) as Repository[]).filter(r=>repositoryScope==="all"||String(r.id)===repositoryScope).map(r=>({id:r.id,fullName:r.fullName,connectionId:c.id,installationId:Number(c.installationId)}))),repositoryNames: repos.filter((r) => repositoryScope === "all" || String(r.id) === repositoryScope).map((r) => r.fullName), messages: turns });
+        const answer = await reply({ onDelta, onProgress, firstMessage: history.filter(item => (item.role || "user") === "user").length === 1, organizationId, userId: session.user.id, messageId: result.message.id, conversationId: result.conversation.id, repositoryId: repositoryScope === "all" ? undefined : repositoryScope, repositories: repos.filter(r => repositoryScope === "all" || String(r.id) === repositoryScope),repositoryNames: repos.filter((r) => repositoryScope === "all" || String(r.id) === repositoryScope).map((r) => r.fullName), messages: turns });
         assistant = await adapter.transaction(async (tx) => {
           const access = await tx.update({ model: "member", where: [{ field: "id", value: member.id }], update: { id: member.id } });
           if (!access) throw new ChatError(403,"You no longer have access to this workspace.");
